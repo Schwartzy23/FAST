@@ -54,3 +54,4 @@ def load_capacitance_data(file_path):
 
 
 
+print(calculate_force)

@@ -22,10 +22,10 @@ void A_data() { // fn. that gets accleration data from IMU
   int16_t Ay_meas = Wire.read() << 8 | Wire.read(); // Same but for y
   int16_t Az_meas = Wire.read() << 8 | Wire.read(); // Same but for z
 
-  Ax = (float)Ax_meas; // Changing variable type, may need some kind of scale factor here
-  Ay = (float)Ay_meas;
-  Az = (float)Az_meas;
-
+  // Convert to g's (1g = 16384 according to MPU-9250 datasheet for ±2g range)
+  Ax = (float)Ax_meas / 16384.0;
+  Ay = (float)Ay_meas / 16384.0;
+  Az = (float)Az_meas / 16384.0;
 }
 
 void Gyr_data() { // fn. that gets gyroscope data from IMU
@@ -49,12 +49,11 @@ void Gyr_data() { // fn. that gets gyroscope data from IMU
   int16_t Gy_meas = Wire.read() << 8 | Wire.read();
   int16_t Gz_meas = Wire.read() << 8 | Wire.read();
 
-  Gx = (float)Gx_meas; // have to sest or change sens. then scale
-  Gy = (float)Gy_meas;
-  Gz = (float)Gz_meas;
-
+  // Convert to degrees/s (65.5 according to MPU-9250 datasheet for ±500°/s range)
+  Gx = (float)Gx_meas / 65.5;
+  Gy = (float)Gy_meas / 65.5;
+  Gz = (float)Gz_meas / 65.5;
 }
-
 
 void setup() {
   Serial.begin(9600); // Set serial baud rate
@@ -66,20 +65,19 @@ void setup() {
   Wire.write(0x6B); // Write to power management register
   Wire.write(0x00); // Set to default, "power mode"
   Wire.endTransmission();
-
 }
 
-
-void loop() { // Only uncomment one variable at a time to view in serial monitor or all will plot simultaneously. Will improve later
-
+void loop() {
+  // Get both acceleration and gyroscope data
   A_data();
-  //Serial.println(Ax);
- // Serial.println(Ay);
+  Gyr_data();
+
+  // Send acceleration data in comma-separated format
+  Serial.print(Ax);
+  Serial.print(",");
+  Serial.print(Ay);
+  Serial.print(",");
   Serial.println(Az);
 
-  Gyr_data();
-  //Serial.println(Gx);
-  //Serial.println(Gy);
-  //Serial.println(Gz);
-  delay(50);
+  delay(50);  // 50ms delay gives us 20 samples per second
 }
