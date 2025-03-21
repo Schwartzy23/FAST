@@ -1,0 +1,107 @@
+import pandas as pd
+import numpy as np
+import matplotlib.pyplot as plt
+from mpl_toolkits.mplot3d import Axes3D
+
+########################################
+# Helper function to set 3D axes to the same scale
+########################################
+def set_axes_equal_3d(ax):
+    x_limits = ax.get_xlim3d()
+    y_limits = ax.get_ylim3d()
+    z_limits = ax.get_zlim3d()
+    x_range = abs(x_limits[1] - x_limits[0])
+    x_middle = np.mean(x_limits)
+    y_range = abs(y_limits[1] - y_limits[0])
+    y_middle = np.mean(y_limits)
+    z_range = abs(z_limits[1] - z_limits[0])
+    z_middle = np.mean(z_limits)
+    plot_radius = 0.5 * max([x_range, y_range, z_range])
+    ax.set_xlim3d([x_middle - plot_radius, x_middle + plot_radius])
+    ax.set_ylim3d([y_middle - plot_radius, y_middle + plot_radius])
+    ax.set_zlim3d([z_middle - plot_radius, z_middle + plot_radius])
+
+########################################
+# Simple Kalman Filter Class for acceleration smoothing
+########################################
+class KalmanFilter:
+    def __init__(self, process_variance, measurement_variance, initial_value=0, initial_estimate_error=1):
+        self.process_variance = process_variance
+        self.measurement_variance = measurement_variance
+        self.estimate = initial_value
+        self.estimate_error = initial_estimate_error
+        
+    def update(self, measurement):
+        prediction = self.estimate
+        prediction_error = self.estimate_error + self.process_variance
+        kalman_gain = prediction_error / (prediction_error + self.measurement_variance)
+        self.estimate = prediction + kalman_gain * (measurement - prediction)
+        self.estimate_error = (1 - kalman_gain) * prediction_error
+        return self.estimate
+
+########################################
+# Load the CSV file logged from the SD card
+########################################
+# Make sure 'imu_data.csv' is in the same directory as this script or provide the full path.
+data = pd.read_csv('imu_data.csv')
+
+# Extract data columns
+time_data = data['time_s'].values
+acc_x = data['acc_x'].values
+acc_y = data['acc_y'].values
+acc_z = data['acc_z'].values
+
+# Convert acceleration from g's to m/s² (1 g = 9.81 m/s²)
+acc_x = acc_x * 9.81
+acc_y = acc_y * 9.81
+acc_z = acc_z * 9.81
+
+########################################
+# Apply Kalman Filter to smooth acceleration data
+########################################
+kf_ax = KalmanFilter(0.1, 0.1)
+kf_ay = KalmanFilter(0.1, 0.1)
+kf_az = KalmanFilter(0.1, 0.1)
+
+filtered_ax = np.array([kf_ax.update(a) for a in acc_x])
+filtered_ay = np.array([kf_ay.update(a) for a in acc_y])
+filtered_az = np.array([kf_az.update(a) for a in acc_z])
+
+########################################
+# Integrate acceleration to compute velocity and position
+########################################
+velocity_x = np.zeros_like(filtered_ax)
+velocity_y = np.zeros_like(filtered_ay)
+velocity_z = np.zeros_like(filtered_az)
+
+position_x = np.zeros_like(filtered_ax)
+position_y = np.zeros_like(filtered_ay)
+position_z = np.zeros_like(filtered_az)
+
+# Compute time differences (dt) between successive measurements
+dt = np.diff(time_data, prepend=time_data[0])
+
+for i in range(1, len(time_data)):
+    velocity_x[i] = velocity_x[i-1] + filtered_ax[i] * dt[i]
+    velocity_y[i] = velocity_y[i-1] + filtered_ay[i] * dt[i]
+    velocity_z[i] = velocity_z[i-1] + filtered_az[i] * dt[i]
+    
+    position_x[i] = position_x[i-1] + velocity_x[i] * dt[i]
+    position_y[i] = position_y[i-1] + velocity_y[i] * dt[i]
+    position_z[i] = position_z[i-1] + velocity_z[i] * dt[i]
+
+########################################
+# Plot the 3D Position Trajectory
+########################################
+fig = plt.figure(figsize=(8,6))
+ax = fig.add_subplot(111, projection='3d')
+ax.plot(position_x, position_y, position_z, 'm-', label='Position Trajectory')
+ax.scatter(position_x[0], position_y[0], position_z[0], color='g', s=100, label='Start')
+ax.scatter(position_x[-1], position_y[-1], position_z[-1], color='r', s=100, label='End')
+ax.set_xlabel('X (m)')
+ax.set_ylabel('Y (m)')
+ax.set_zlabel('Z (m)')
+ax.set_title('3D Position Trajectory')
+ax.legend()
+set_axes_equal_3d(ax)
+plt.show()
