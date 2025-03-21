@@ -1,0 +1,91 @@
+#include <Wire.h>
+#include <SPI.h>
+#include <SD.h>
+#include <MPU9250.h>  // Ensure you have a compatible MPU9250 library installed
+
+// Define the chip select pin for the SD card (adjust as per your wiring)
+const int chipSelect = 10;
+
+// Create an MPU9250 object using the default I2C address (0x68)
+MPU9250 mpu(Wire, 0x68);
+
+File dataFile;
+unsigned long startTime;
+
+void setup() {
+  // Start serial communication for debugging (optional)
+  Serial.begin(9600);
+  while (!Serial) {
+    ; // Wait for the serial port to connect if needed
+  }
+  
+  // Initialize I2C communication
+  Wire.begin();
+
+  // Initialize the MPU9250 IMU
+  Serial.println("Initializing MPU9250...");
+  int status = mpu.begin();
+  if (status != 0) {
+    Serial.print("MPU9250 initialization failed. Error code: ");
+    Serial.println(status);
+    while (1); // Halt if initialization fails
+  }
+  Serial.println("MPU9250 initialized successfully.");
+
+  // (Optional) Configure sensor settings if needed, e.g.:
+  // mpu.setAccelRange(MPU9250::ACCEL_RANGE_2G);
+  // mpu.setGyroRange(MPU9250::GYRO_RANGE_250DPS);
+
+  // Initialize the SD card
+  Serial.print("Initializing SD card...");
+  if (!SD.begin(chipSelect)) {
+    Serial.println("SD card initialization failed!");
+    while (1);  // Halt if SD card fails
+  }
+  Serial.println("SD card initialized.");
+
+  // Create (or overwrite) the CSV file and write the header row
+  dataFile = SD.open("imu_data.csv", FILE_WRITE);
+  if (dataFile) {
+    dataFile.println("time_s,acc_x,acc_y,acc_z");
+    dataFile.close();
+    Serial.println("CSV file created.");
+  } else {
+    Serial.println("Error opening imu_data.csv");
+  }
+
+  // Record the starting time
+  startTime = millis();
+}
+
+void loop() {
+  // Read sensor data from the MPU9250
+  mpu.readSensor();
+  float ax = mpu.getAccelX();  // in g's
+  float ay = mpu.getAccelY();
+  float az = mpu.getAccelZ();
+
+  // Calculate elapsed time in seconds
+  float timeS = (millis() - startTime) / 1000.0;
+
+  // Format the data as a CSV line (time in seconds, ax, ay, az)
+  String dataString = String(timeS, 3) + "," + 
+                      String(ax, 3) + "," +
+                      String(ay, 3) + "," +
+                      String(az, 3);
+
+  // (Optional) Print the data to Serial for debugging
+  Serial.println(dataString);
+
+  // Open the file to append the data
+  dataFile = SD.open("imu_data.csv", FILE_WRITE);
+  if (dataFile) {
+    dataFile.println(dataString);
+    dataFile.close();
+  } else {
+    Serial.println("Error opening imu_data.csv");
+  }
+
+  // Delay to set the sampling rate (here approximately 100 Hz)
+  delay(10);
+}
